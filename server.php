@@ -13,27 +13,28 @@ $app = new AudiocodesConnector($appPath);
 
 // Instance the Router
 $router = new Router();
-$router->respond(array('GET', 'POST'), '/CreateConversation', function ($request, $response) use ($app) {
-    $app->createConversation();
+$router->respond(array('GET', 'POST'), '/CreateConversation', function () use ($app) {
+    $response = $app->createConversation();
+    return json_encode($response, JSON_UNESCAPED_SLASHES);
 });
 
 $router->with('/conversation', function () use ($router, $app) {
     // Receive messages
-    $router->respond('POST', '/[:id]/activities', function ($request, $response) use ($app) {
-
-        $app->handleRequest();
+    $router->respond('POST', '/[:id]/activities', function () use ($app) {
+        $response = $app->handleRequest();
+        return json_encode($response, JSON_UNESCAPED_SLASHES);
     });
 
     // Keep alive
-    $router->respond('POST', '/[:id]/refresh', function ($request, $response) use ($app) {
-
-        $app->refresh();
+    $router->respond('POST', '/[:id]/refresh', function () use ($app) {
+        $response = $app->refresh();
+        return json_encode($response, JSON_UNESCAPED_SLASHES);
     });
 
     // Disconnect
-    $router->respond('POST', '/[:id]/disconnect', function ($request, $response) use ($app) {
-
-        $app->disconnect();
+    $router->respond('POST', '/[:id]/disconnect', function () use ($app) {
+        $response = $app->disconnect();
+        return json_encode($response, JSON_UNESCAPED_SLASHES);
     });
 });
 

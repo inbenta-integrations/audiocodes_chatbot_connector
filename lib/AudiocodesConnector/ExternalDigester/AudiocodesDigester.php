@@ -39,7 +39,7 @@ class AudiocodesDigester extends DigesterInterface
     {
         $request = json_decode($request);
 
-        $isMessaging = isset($request->activities) && isset($request->activities[0]);
+        $isMessaging = isset($request->activities[0]);
         if ($isMessaging && count($request->activities)) {
             return true;
         }
@@ -52,7 +52,7 @@ class AudiocodesDigester extends DigesterInterface
     public function digestToApi($request)
     {
         $request = json_decode($request);
-        if (is_null($request) || !isset($request->activities) || !isset($request->activities[0])) {
+        if (is_null($request) || !isset($request->activities[0])) {
             return [];
         }
 
@@ -175,7 +175,7 @@ class AudiocodesDigester extends DigesterInterface
 
     protected function hasTextMessage($message)
     {
-        return isset($message->text) && isset($message->text->body) && is_string($message->text->body);
+        return isset($message->text->body) && is_string($message->text->body);
     }
 
 
@@ -212,7 +212,7 @@ class AudiocodesDigester extends DigesterInterface
         ];
 
         $exit = false;
-        if (isset($message->attributes) && isset($message->attributes->DIRECT_CALL) && $message->attributes->DIRECT_CALL == "sys-goodbye") {
+        if (isset($message->attributes->DIRECT_CALL) && $message->attributes->DIRECT_CALL == "sys-goodbye") {
             $messageResponse = ['multiple_output' => [
                 $messageResponse, // message
                 $this->buildHangoutMessage() // disconnect event
@@ -244,7 +244,7 @@ class AudiocodesDigester extends DigesterInterface
                 if (!isset($messageResponse['multiple_output'])) {
                     $messageResponse = ['multiple_output' => [$messageResponse]];
                 }
-                foreach($actionField as $element) {
+                foreach ($actionField as $element) {
                     $messageResponse['multiple_output'][] = $element;
                 }
             }

@@ -1,6 +1,6 @@
 <?php
 
-// Inbenta Hyperchat configuration
+// Escalation configuration
 return array(
     'chat' => array(
         'enabled' => true,

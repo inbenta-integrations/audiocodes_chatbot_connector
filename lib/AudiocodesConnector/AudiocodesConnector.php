@@ -7,7 +7,6 @@ use Inbenta\ChatbotConnector\ChatbotConnector;
 use Inbenta\ChatbotConnector\Utils\SessionManager;
 use Inbenta\AudiocodesConnector\ExternalAPI\AudiocodesAPIClient;
 use Inbenta\AudiocodesConnector\ExternalDigester\AudiocodesDigester;
-use Inbenta\AudiocodesConnector\HyperChatAPI\AudiocodesHyperChatClient;
 
 ## Customized Chatbot API
 use Inbenta\AudiocodesConnector\APIClientCustom\ChatbotAPIClientCustom as ChatbotAPIClient;
@@ -27,9 +26,6 @@ class AudiocodesConnector extends ChatbotConnector
 
             // Initialize base components
             $request = file_get_contents('php://input');
-
-            file_put_contents('php://stderr', "REQUEST: " . json_encode($request));
-
             $externalId = $this->getExternalIdFromRequest();
 
             //
@@ -56,15 +52,6 @@ class AudiocodesConnector extends ChatbotConnector
                 $request
             ); // Instance Audiocodes client
 
-            // Instance HyperchatClient for Audiocodes
-            $chatClient = new AudiocodesHyperChatClient(
-                $this->conf->get('chat.chat'),
-                $this->lang,
-                $this->session,
-                $this->conf,
-                $externalClient
-            );
-
             // Instance Audiocodes digester
             $externalDigester = new AudiocodesDigester(
                 $this->lang,
@@ -72,7 +59,7 @@ class AudiocodesConnector extends ChatbotConnector
                 $this->botClient
             );
 
-            $this->initComponents($externalClient, $chatClient, $externalDigester);
+            $this->initComponents($externalClient, null, $externalDigester);
         } catch (Exception $e) {
             echo json_encode(["error" => $e->getMessage()]);
             die();
@@ -89,9 +76,8 @@ class AudiocodesConnector extends ChatbotConnector
         // Try to get user_id from a Audiocodes message request
         $externalId = AudiocodesAPIClient::buildExternalIdFromRequest();
         if (is_null($externalId)) {
-            echo json_encode(["error" => "Invalid request"]);
             session_write_close();
-            die;
+            throw new Exception('Invalid request!');
         }
         return $externalId;
     }
@@ -110,23 +96,20 @@ class AudiocodesConnector extends ChatbotConnector
             if (!$data) {
                 $data = (object) $_GET;
             }
-
             if (!$data) {
                 throw new Exception('Invalid request!');
             }
 
             $conversationId = $data->conversation;
 
-            echo json_encode([
+            return [
                 'activitiesURL'  => "conversation/{$conversationId}/activities",
                 'refreshURL'     => "conversation/{$conversationId}/refresh",
                 'disconnectURL'  => "conversation/{$conversationId}/disconnect",
                 'expiresSeconds' => 120
-            ], JSON_UNESCAPED_SLASHES);
+            ];
         } catch (Exception $e) {
-            echo json_encode(['error' => 'Invalid request!']);
-            http_response_code(403);
-            die;
+            return ["error" => $e->getMessage()];
         }
     }
 
@@ -137,16 +120,9 @@ class AudiocodesConnector extends ChatbotConnector
      */
     public function refresh()
     {
-        try {
-            $message = [
-                'expiresSeconds' => 120
-            ];
-
-            echo json_encode($message);
-        } catch (Exception $e) {
-            echo json_encode(["error" => $e->getMessage()]);
-            die();
-        }
+        return [
+            'expiresSeconds' => 120
+        ];
     }
 
     /**
@@ -168,11 +144,9 @@ class AudiocodesConnector extends ChatbotConnector
                 $this->botClient->setUserInfo(['disconnect_reason' => $data->reason]);
             }
 
-            header("Content-type: application/json");
-            echo "{}";
+            return [];
         } catch (Exception $e) {
-            echo json_encode(["error" => $e->getMessage()]);
-            die();
+            return ["error" => $e->getMessage()];
         }
     }
 
@@ -202,16 +176,6 @@ class AudiocodesConnector extends ChatbotConnector
         return true;
     }
 
-    /**
-     * Get the current environment
-     *
-     * @return String
-     */
-    public function getEnvironment()
-    {
-        return $this->environment;
-    }
-
     public function handleRequest()
     {
         try {
@@ -219,15 +183,26 @@ class AudiocodesConnector extends ChatbotConnector
             // Translate the request into a ChatbotAPI request
             $externalRequest = $this->digester->digestToApi($request);
             // Check if it's needed to perform any action other than a standard user-bot interaction
-            $this->handleNonBotActions($externalRequest);
+            $nonBotResponse = $this->handleNonBotActions($externalRequest);
+            if (!is_null($nonBotResponse)) {
+                return $nonBotResponse;
+            }
             // Handle standard bot actions
             $this->handleBotActions($externalRequest);
             // Send all messages
-            $this->sendMessages();
+            return $this->sendMessages();
         } catch (Exception $e) {
-            echo json_encode(["error" => $e->getMessage()]);
-            die();
+            return ["error" => $e->getMessage()];
         }
+    }
+
+    protected function handleNonBotActions($digestedRequest)
+    {
+        // If user answered to an ask-to-escalate question, handle it
+        if ($this->session->get('askingForEscalation', false)) {
+            return $this->handleEscalation($digestedRequest);
+        }
+        return null;
     }
 
     /**
@@ -235,7 +210,7 @@ class AudiocodesConnector extends ChatbotConnector
      */
     public function sendMessages()
     {
-        echo json_encode(['activities' => $this->messages]);
+        return ['activities' => $this->messages];
     }
 
     protected function sendMessagesToExternal($messages)
@@ -253,12 +228,12 @@ class AudiocodesConnector extends ChatbotConnector
     {
         if (!$this->session->get('askingForEscalation', false)) {
             if ($this->session->get('escalationType') == static::ESCALATION_DIRECT) {
-                $this->escalateToAgent();
+                return $this->escalateToAgent();
             } else {
                 // Ask the user if wants to escalate
                 $this->session->set('askingForEscalation', true);
                 $this->messages[] = $this->digester->buildEscalationMessage();
-                $this->sendMessages();
+                return $this->sendMessages();
             }
         } else {
             // Handle user response to an escalation question
@@ -279,16 +254,15 @@ class AudiocodesConnector extends ChatbotConnector
 
             //Confirm the escalation
             if (count($userAnswer) && isset($userAnswer[0]['message']) && preg_match('/' . $match . '/', strtolower($userAnswer[0]['message']))) {
-                $this->escalateToAgent();
+                return $this->escalateToAgent();
             } else {
                 //Any other response that is no "yes" (or similar) it's going to be considered as "no"
                 $message = ["option" => strtolower($this->lang->translate('no'))];
                 $botResponse = $this->sendMessageToBot($message);
                 $this->sendMessagesToExternal($botResponse);
-                $this->sendMessages();
+                return $this->sendMessages();
             }
         }
-        die;
     }
 
     /**
@@ -297,12 +271,12 @@ class AudiocodesConnector extends ChatbotConnector
      */
     protected function escalateToAgent()
     {
-        $this->trackContactEvent("CONTACT_ATTENDED");
+        $this->trackContactEvent("CHAT_ATTENDED");
         $this->session->delete('escalationType');
         $this->session->delete('escalationV2');
 
         $this->messages[] = $this->digester->buildEscalatedMessage();
         $this->messages[] = $this->externalClient->escalate($this->conf->get('chat.chat.address'));
-        $this->sendMessages();
+        return $this->sendMessages();
     }
 }
