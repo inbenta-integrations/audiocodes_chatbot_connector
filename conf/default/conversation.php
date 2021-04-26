@@ -9,7 +9,8 @@ return array(
                 "ANSWER_TEXT",
             ),
             "maxOptions"            => 3,
-            "maxRelatedContents"    => 2
+            "maxRelatedContents"    => 2,
+            'skipLastCheckQuestion' => true
         ),
         "forms" => array(
             "allowUserToAbandonForm"    => true,

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "499df11db76772ccf15467744266a051",
+    "content-hash": "c69e77237fe962df6ecfa37aaf7597c8",
     "packages": [
         {
             "name": "guzzlehttp/guzzle",
@@ -207,16 +207,16 @@
         },
         {
             "name": "inbenta/chatbot-api-connector",
-            "version": "v1.3.8",
+            "version": "v1.3.12",
             "source": {
                 "type": "git",
                 "url": "https://github.com/inbenta-integrations/chatbot_api_connector.git",
-                "reference": "7535ec6d28211ecbef4eb7b5b48640083d076980"
+                "reference": "659030b64b992872cefb356f0199b74d83bd3f42"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/inbenta-integrations/chatbot_api_connector/zipball/7535ec6d28211ecbef4eb7b5b48640083d076980",
-                "reference": "7535ec6d28211ecbef4eb7b5b48640083d076980",
+                "url": "https://api.github.com/repos/inbenta-integrations/chatbot_api_connector/zipball/659030b64b992872cefb356f0199b74d83bd3f42",
+                "reference": "659030b64b992872cefb356f0199b74d83bd3f42",
                 "shasum": ""
             },
             "require": {
@@ -231,10 +231,10 @@
                 }
             },
             "support": {
-                "source": "https://github.com/inbenta-integrations/chatbot_api_connector/tree/v1.3.8",
+                "source": "https://github.com/inbenta-integrations/chatbot_api_connector/tree/v1.3.12",
                 "issues": "https://github.com/inbenta-integrations/chatbot_api_connector/issues"
             },
-            "time": "2021-03-05T19:28:59+00:00"
+            "time": "2021-04-06T18:44:38+00:00"
         },
         {
             "name": "klein/klein",

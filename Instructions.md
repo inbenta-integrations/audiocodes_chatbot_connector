@@ -93,55 +93,55 @@ The Audiocodes template must be served by a public web server in order to allow 
 
 Log in to your AudioCodes PNC (Phone Number Connector) account https://pnc.audiocodes.io/login:
 
-![instructions01](public/instructions01.png)
+![instructions01](public/img/instructions01.png)
 
 Or create a new account (https://pnc.audiocodes.io):
 
-![instructions02](public/instructions02.png)
+![instructions02](public/img/instructions02.png)
 
 
 ## Credit
 
 Before the bot configuration, you need to add credit to your account. Click on **Billing** (at the bottom of the left menu):
 
-![instructions03](public/instructions03.png)
+![instructions03](public/img/instructions03.png)
 
 In the next screen, click on **Add credit** button.
 
-![instructions04](public/instructions04.png)
+![instructions04](public/img/instructions04.png)
 
 Select the **Credit amount** and fill the credit card data.
 
-![instructions05](public/instructions05.png)
+![instructions05](public/img/instructions05.png)
 
 
 ## Bot Configuration
 
 Once you have enough credit, click on **Bots** from the left menu.
 
-![instructions06](public/instructions06.png)
+![instructions06](public/img/instructions06.png)
 
 Add a new configuration by clicking on the **+** button at the bottom.
 
-![instructions07](public/instructions07.png)
+![instructions07](public/img/instructions07.png)
 
 In the newly opened window, choose **AudioCodes Bot API**  (This will be Inbenta in the future) and click **Next**.
 
-![instructions08](public/instructions08.png)
+![instructions08](public/img/instructions08.png)
 
 In the next screen, enter a **Bot name**, **Bot URL** (URL where the Inbenta chatbot connector is hosted), and **Token** (This is a password-like value and must be the same as the one defined inside the connector (see [Token](#token) section below for details)).
 
-![instructions09](public/instructions09.png)
+![instructions09](public/img/instructions09.png)
 
 > At the end of the **Bot URL** it MUST end with: “/**CreateConversation**” (e.g. https://boturl.com/CreateConversation)
 
 Once the bot configuration is done, purchase a number or choose an existing number.
 
-![instructions10](public/instructions10.png)
+![instructions10](public/img/instructions10.png)
 
 Finally, the configuration of the number is needed.  Choose the configuration for the Phone Number.
 
-![instructions11](public/instructions11.png)
+![instructions11](public/img/instructions11.png)
 
 For more information, you can check the “Quick Setup Guide” of Audiocodes:
 
@@ -165,7 +165,7 @@ return [
 
 ## Text Content
 
-We should always keep in mind that user interaction is going to be though voice. 
+We should always keep in mind that user interaction is going to be through voice. 
 
 Hence, content should be simple text: **avoid the use of HTML tags, multimedia and URLs**. This is especially important if you are using Voice template, most of the HTML tags are not recognized by the TTS (Text-To-Speech) services.
 
@@ -178,4 +178,4 @@ You can add a command that detects the intent of end the call using voice. This 
 * Check **directCall** and set the text "**sys-goodbye**"
 * Add "**Learn with semantic expansion**" with the variations to end a call (like "goodbye", "end call", etc).
 
-![instructions12](public/instructions12.png)
+![instructions12](public/img/instructions12.png)

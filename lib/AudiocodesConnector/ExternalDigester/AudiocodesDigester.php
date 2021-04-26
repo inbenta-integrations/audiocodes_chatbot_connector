@@ -4,6 +4,7 @@ namespace Inbenta\AudiocodesConnector\ExternalDigester;
 
 use \Exception;
 use Inbenta\ChatbotConnector\ExternalDigester\Channels\DigesterInterface;
+use Inbenta\AudiocodesConnector\Helpers\Helper;
 use Ramsey\Uuid\Uuid;
 
 class AudiocodesDigester extends DigesterInterface
@@ -11,17 +12,18 @@ class AudiocodesDigester extends DigesterInterface
     protected $conf;
     protected $channel;
     protected $langManager;
+    protected $session;
     protected $externalMessageTypes = array(
         'text',
         'event'
     );
 
-    public function __construct($langManager, $conf, $bot)
+    public function __construct($langManager, $conf, $session)
     {
         $this->langManager = $langManager;
         $this->channel = 'PhoneCall';
         $this->conf = $conf;
-        $this->bot = $bot;
+        $this->session = $session;
     }
 
     /**
@@ -59,10 +61,78 @@ class AudiocodesDigester extends DigesterInterface
         $messages = $request->activities;
         $output = [];
 
-        foreach ($messages as $msg) {
-            $msgType = $this->checkExternalMessageType($msg);
-            $digester = 'digestFromAudiocodes' . ucfirst($msgType);
-            $output[] = $this->$digester($msg);
+        if (isset($messages[0]->type) && isset($messages[0]->name) && $messages[0]->type === 'event' && $messages[0]->name !== '') {
+            $output = $this->checkOptions($messages[0]->name);
+        }
+        if (count($output) === 0) {
+            foreach ($messages as $msg) {
+                $msgType = $this->checkExternalMessageType($msg);
+                $digester = 'digestFromAudiocodes' . ucfirst($msgType);
+                $output[] = $this->$digester($msg);
+            }
+        }
+        return $output;
+    }
+
+    /**
+     * Check if the response has options
+     * @param string $userMessage
+     * @return array $output
+     */
+    protected function checkOptions(string $userMessage)
+    {
+        $output = [];
+        if ($this->session->has('options')) {
+
+            $lastUserQuestion = $this->session->get('lastUserQuestion');
+            $options = $this->session->get('options');
+            $this->session->delete('options');
+            $this->session->delete('lastUserQuestion');
+
+            $selectedOption = false;
+            $selectedOptionText = "";
+            $isListValues = false;
+            $isPolar = false;
+            $optionSelected = false;
+            foreach ($options as $option) {
+                if (isset($option->list_values)) {
+                    $isListValues = true;
+                } else if (isset($option->is_polar)) {
+                    $isPolar = true;
+                }
+                if (Helper::removeAccentsToLower($userMessage) === Helper::removeAccentsToLower($this->langManager->translate($option->label))) {
+                    if ($isListValues || (isset($option->attributes) && isset($option->attributes->DYNAMIC_REDIRECT) && $option->attributes->DYNAMIC_REDIRECT == 'escalationStart')) {
+                        $selectedOptionText = $option->label;
+                    } else {
+                        $selectedOption = $option;
+                        $lastUserQuestion = isset($option->title) && !$isPolar ? $option->title : $lastUserQuestion;
+                    }
+                    $optionSelected = true;
+                    break;
+                }
+            }
+
+            if (!$optionSelected) {
+                if ($isListValues) { //Set again options for variable
+                    if ($this->session->get('optionListValues', 0) < 1) { //Make sure only enters here just once
+                        $this->session->set('options', $options);
+                        $this->session->set('lastUserQuestion', $lastUserQuestion);
+                        $this->session->set('optionListValues', 1);
+                    } else {
+                        $this->session->delete('options');
+                        $this->session->delete('lastUserQuestion');
+                        $this->session->delete('optionListValues');
+                    }
+                } else if ($isPolar) { //For polar, on wrong answer, goes for NO
+                    $output[]['message'] = $this->langManager->translate('no');
+                }
+            }
+
+            if ($selectedOption) {
+                $output[]['option'] = $selectedOption->value;
+            } else if ($selectedOptionText !== "") {
+                $output[]['message'] = $selectedOptionText;
+            }
         }
         return $output;
     }
@@ -81,7 +151,7 @@ class AudiocodesDigester extends DigesterInterface
         } elseif (isset($request->messages) && count($request->messages) > 0 && $this->hasTextMessage($messages[0])) {
             // If the first message contains text although it's an unknown message type, send the text to the user
             $output = [];
-            $output[] = $this->digestFromApiAnswer($messages[0]);
+            $output[] = $this->digestFromApiAnswer($messages[0], $lastUserQuestion);
             return $output;
         } else {
             throw new Exception("Unknown ChatbotAPI response: " . json_encode($request, true));
@@ -91,7 +161,7 @@ class AudiocodesDigester extends DigesterInterface
         foreach ($messages as $msg) {
             $msgType = $this->checkApiMessageType($msg);
             $digester = 'digestFromApi' . ucfirst($msgType);
-            $digestedMessage = $this->$digester($msg);
+            $digestedMessage = $this->$digester($msg, $lastUserQuestion);
 
             if (isset($digestedMessage["type"]) && $digestedMessage["type"] === "empty") {
                 continue;
@@ -204,7 +274,7 @@ class AudiocodesDigester extends DigesterInterface
 
     /********************** CHATBOT API MESSAGE DIGESTERS **********************/
 
-    protected function digestFromApiAnswer($message)
+    protected function digestFromApiAnswer($message, $lastUserQuestion)
     {
         $messageResponse = [
             'type' => 'message',
@@ -239,7 +309,7 @@ class AudiocodesDigester extends DigesterInterface
         }
 
         if (isset($message->actionField) && !empty($message->actionField) && $message->actionField->fieldType !== 'default' && !$exit) {
-            $actionField = $this->handleMessageWithActionField($message);
+            $actionField = $this->handleMessageWithActionField($message, $lastUserQuestion);
             if (count($actionField) > 0) {
                 if (!isset($messageResponse['multiple_output'])) {
                     $messageResponse = ['multiple_output' => [$messageResponse]];
@@ -253,25 +323,81 @@ class AudiocodesDigester extends DigesterInterface
         return $messageResponse;
     }
 
-    protected function digestFromApiMultipleChoiceQuestion($message)
+    /**
+     * Validate if the message has action fields
+     * @param object $message
+     * @param array $output
+     * @return array $output
+     */
+    protected function handleMessageWithActionField(object $message, $lastUserQuestion)
     {
-        return ['multiple_output' => array_map(function ($message) {
-            return [
-                'type' => 'message',
-                'text' => $this->cleanMessage($message->message ?? $message->label ?? $message)
-            ];
-        }, array_merge([$message->message], $message->options))];
+        $output = [];
+        if (isset($message->actionField) && !empty($message->actionField)) {
+            if ($message->actionField->fieldType === 'list') {
+                $output = $this->handleMessageWithListValues($message->actionField->listValues, $lastUserQuestion);
+            }
+        }
+        return $output;
     }
 
-    protected function digestFromApiPolarQuestion($message)
+    /**
+     * Set the options for message with list values
+     * @param object $listValues
+     * @return array $output
+     */
+    protected function handleMessageWithListValues(object $listValues, $lastUserQuestion)
     {
-        return [
+        $output = [];
+        $output['multiple_output'] = [];
+        $options = $listValues->values;
+        foreach ($options as $index => &$option) {
+            $option->list_values = true;
+            $option->label = $option->option;
+            $output['multiple_output'][] = [
+                'type' => 'message',
+                'text' => $option->label
+            ];
+            if ($index == 5) break;
+        }
+
+        if (count($output['multiple_output']) > 0) {
+            $this->session->set('options', $options);
+            $this->session->set('lastUserQuestion', $lastUserQuestion);
+        }
+        return $output;
+    }
+
+    protected function digestFromApiMultipleChoiceQuestion($message, $lastUserQuestion, $isPolar = false)
+    {
+        $output = [];
+        $output['multiple_output'] = [[
             'type' => 'message',
             'text' => $this->cleanMessage($message->message)
-        ];
+        ]];
+
+        $options = $message->options;
+        foreach ($options as &$option) {
+            if (isset($option->attributes->title) && !$isPolar) {
+                $option->title = $option->attributes->title;
+            } elseif ($isPolar) {
+                $option->is_polar = true;
+            }
+            $output['multiple_output'][] = [
+                'type' => 'message',
+                'text' => $this->cleanMessage($option->label)
+            ];
+        }
+        $this->session->set('options', $options);
+        $this->session->set('lastUserQuestion', $lastUserQuestion);
+        return $output;
     }
 
-    protected function digestFromApiExtendedContentsAnswer($message)
+    protected function digestFromApiPolarQuestion($message, $lastUserQuestion)
+    {
+        return $this->digestFromApiMultipleChoiceQuestion($message, $lastUserQuestion, true);
+    }
+
+    protected function digestFromApiExtendedContentsAnswer($message, $lastUserQuestion)
     {
         return [
             'type' => 'message',
@@ -336,43 +462,9 @@ class AudiocodesDigester extends DigesterInterface
     public function cleanMessage(string $message)
     {
         $message = strip_tags($message);
+        $message = str_replace("&nbsp;", " ", $message);
         $message = str_replace("\t", " ", $message);
         $message = str_replace("\n", " ", $message);
         return trim($message);
-    }
-
-    /**
-     * Validate if the message has action fields
-     * @param object $message
-     * @param array $output
-     * @return array $output
-     */
-    protected function handleMessageWithActionField(object $message)
-    {
-        $output = [];
-        if (isset($message->actionField) && !empty($message->actionField)) {
-            if ($message->actionField->fieldType === 'list') {
-                $output = $this->handleMessageWithListValues($message->actionField->listValues);
-            }
-        }
-        return $output;
-    }
-
-    /**
-     * Set the options for message with list values
-     * @param object $listValues
-     * @return array $output
-     */
-    protected function handleMessageWithListValues(object $listValues)
-    {
-        $output = [];
-        foreach ($listValues->values as $index => $option) {
-            $output[] = [
-                'type' => 'message',
-                'text' => $option->label[0]
-            ];
-            if ($index == 5) break;
-        }
-        return $output;
     }
 }

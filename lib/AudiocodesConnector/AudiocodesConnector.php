@@ -56,7 +56,7 @@ class AudiocodesConnector extends ChatbotConnector
             $externalDigester = new AudiocodesDigester(
                 $this->lang,
                 $this->conf->get('conversation.digester'),
-                $this->botClient
+                $this->session
             );
 
             $this->initComponents($externalClient, null, $externalDigester);
